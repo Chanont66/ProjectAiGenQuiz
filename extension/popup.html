@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 300px;
+            padding: 15px;
+            font-family: sans-serif;
+            background: #fafafa;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            border: none;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 8px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .quiz-container {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 2px dashed #eee;
+        }
+
+        .quiz-item {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #eee;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .quiz-item h4 {
+            margin-top: 0;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .choice {
+            display: block;
+            padding: 8px;
+            margin: 5px 0;
+            background: #fdfdfd;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .choice.correct {
+            background: #e7f3ff;
+            border-color: #bee3f8;
+            font-weight: bold;
+        }
+
+        .status {
+            margin-top: 5px;
+            font-size: 12px;
+            text-align: center;
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <h3>🚀 Quick Log</h3>
+    <textarea id="log-text" placeholder="Type something..."></textarea>
+    <div>กำหนดจำนวนข้อ</div>
+    <input type="number" id="num-questions" min="1" max="20" value="1">
+    <button id="send-btn">Send to Backend</button>
+    <div id="status-msg" class="status"></div>
+    <div id="quiz-results" class="quiz-container"></div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
