@@ -4,15 +4,33 @@
 <head>
     <meta charset="UTF-8">
     <style>
+        /* 1. ส่วนกรอบนอกสุด (พื้นหลังของ Popup) */
         body {
-            width: 320px; /* ขยายความกว้างขึ้นนิดหน่อยให้อ่านง่าย */
-            max-height: 550px; /* ป้องกันเนื้อหาล้นหน้าจอ Popup */
-            overflow-y: auto; /* เพิ่ม Scrollbar เมื่อเนื้อหายาวเกินไป */
-            padding: 15px;
-            font-family: sans-serif;
-            background: #fafafa;
+            width: 340px; /* ขยายความกว้างเผื่อขอบเงา */
             margin: 0;
+            padding: 12px; /* เว้นระยะเข้ามาด้านใน เพื่อให้มีพื้นที่แสดงความโค้งและเงา */
+            font-family: sans-serif;
+            background: #eef0f3; /* สีพื้นหลังด้านนอกสุด (เทาอ่อน) */
             box-sizing: border-box;
+        }
+
+        /* 2. ส่วนกล่องแอปสีขาว (ทำมุมโค้งตรงนี้) */
+        .app-wrapper {
+            background: #ffffff;
+            border-radius: 16px; /* 🌟 ปรับความโค้งของมุมตรงนี้ (เลขยิ่งมากยิ่งโค้ง) */
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08); /* เพิ่มเงาให้ดูป๊อปอัพเด้งขึ้นมา */
+            max-height: 520px; /* ควบคุมความสูงที่กล่องนี้แทน */
+            overflow-y: auto; /* ให้เลื่อนสกอร์ลบาร์ข้างในกล่อง */
+        }
+
+        /* 🌟 3. ตกแต่ง Scrollbar ให้ดูโค้งมนเข้ากับ UI */
+        .app-wrapper::-webkit-scrollbar {
+            width: 6px;
+        }
+        .app-wrapper::-webkit-scrollbar-thumb {
+            background-color: #cccccc;
+            border-radius: 10px;
         }
 
         h3 {
@@ -27,10 +45,9 @@
             border: 1px solid #ddd;
             border-radius: 8px;
             box-sizing: border-box;
-            resize: vertical; /* ให้ผู้ใช้ขยายกล่องข้อความได้ในแนวตั้ง */
+            resize: vertical;
         }
 
-        /* จัดกลุ่มส่วนเลือกจำนวนข้อให้อยู่บรรทัดเดียวกัน */
         .input-group {
             display: flex;
             justify-content: space-between;
@@ -119,23 +136,25 @@
             font-size: 12px;
             text-align: center;
             color: #555;
-            min-height: 15px; /* จองพื้นที่ไว้ไม่ให้ UI กระตุกตอนแสดงข้อความ */
+            min-height: 15px;
         }
     </style>
 </head>
 
 <body>
-    <h3>Quick Log</h3>
-    <textarea id="log-text" placeholder="Type something..."></textarea>
-    
-    <div class="input-group">
-        <label for="num-questions">กำหนดจำนวนข้อ</label>
-        <input type="number" id="num-questions" min="1" max="20" value="1">
+    <div class="app-wrapper">
+        <h3>Quick Log</h3>
+        <textarea id="log-text" placeholder="Type something..."></textarea>
+        
+        <div class="input-group">
+            <label for="num-questions">กำหนดจำนวนข้อ</label>
+            <input type="number" id="num-questions" min="1" max="20" value="1">
+        </div>
+        
+        <button id="send-btn">Send to Backend</button>
+        <div id="status-msg" class="status"></div>
+        <div id="quiz-results" class="quiz-container"></div>
     </div>
-    
-    <button id="send-btn">Send to Backend</button>
-    <div id="status-msg" class="status"></div>
-    <div id="quiz-results" class="quiz-container"></div>
     
     <script src="popup.js"></script>
 </body>
