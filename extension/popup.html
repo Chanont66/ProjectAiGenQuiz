@@ -1,14 +1,23 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 
 <head>
     <meta charset="UTF-8">
     <style>
         body {
-            width: 300px;
+            width: 320px; /* ขยายความกว้างขึ้นนิดหน่อยให้อ่านง่าย */
+            max-height: 550px; /* ป้องกันเนื้อหาล้นหน้าจอ Popup */
+            overflow-y: auto; /* เพิ่ม Scrollbar เมื่อเนื้อหายาวเกินไป */
             padding: 15px;
             font-family: sans-serif;
             background: #fafafa;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #333;
         }
 
         textarea {
@@ -18,24 +27,57 @@
             border: 1px solid #ddd;
             border-radius: 8px;
             box-sizing: border-box;
+            resize: vertical; /* ให้ผู้ใช้ขยายกล่องข้อความได้ในแนวตั้ง */
+        }
+
+        /* จัดกลุ่มส่วนเลือกจำนวนข้อให้อยู่บรรทัดเดียวกัน */
+        .input-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .input-group label {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .input-group input {
+            width: 60px;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            text-align: center;
         }
 
         button {
             width: 100%;
             border: none;
             padding: 12px;
-            margin-top: 10px;
+            margin-top: 15px;
             border-radius: 8px;
             background: #007bff;
             color: white;
             cursor: pointer;
-            transition: background 0.2s;
+            font-weight: bold;
+            transition: background 0.2s, opacity 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.8;
         }
 
         .quiz-container {
             margin-top: 20px;
             padding-top: 15px;
-            border-top: 2px dashed #eee;
+            border-top: 2px dashed #ddd;
         }
 
         .quiz-item {
@@ -49,13 +91,15 @@
 
         .quiz-item h4 {
             margin-top: 0;
+            margin-bottom: 10px;
             color: #333;
             font-size: 14px;
+            line-height: 1.4;
         }
 
         .choice {
             display: block;
-            padding: 8px;
+            padding: 8px 10px;
             margin: 5px 0;
             background: #fdfdfd;
             border: 1px solid #eee;
@@ -67,25 +111,32 @@
             background: #e7f3ff;
             border-color: #bee3f8;
             font-weight: bold;
+            color: #004085;
         }
 
         .status {
-            margin-top: 5px;
+            margin-top: 10px;
             font-size: 12px;
             text-align: center;
             color: #555;
+            min-height: 15px; /* จองพื้นที่ไว้ไม่ให้ UI กระตุกตอนแสดงข้อความ */
         }
     </style>
 </head>
 
 <body>
-    <h3>🚀 Quick Log</h3>
+    <h3>Quick Log</h3>
     <textarea id="log-text" placeholder="Type something..."></textarea>
-    <div>กำหนดจำนวนข้อ</div>
-    <input type="number" id="num-questions" min="1" max="20" value="1">
+    
+    <div class="input-group">
+        <label for="num-questions">กำหนดจำนวนข้อ</label>
+        <input type="number" id="num-questions" min="1" max="20" value="1">
+    </div>
+    
     <button id="send-btn">Send to Backend</button>
     <div id="status-msg" class="status"></div>
     <div id="quiz-results" class="quiz-container"></div>
+    
     <script src="popup.js"></script>
 </body>
 
