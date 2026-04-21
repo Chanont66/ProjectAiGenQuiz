@@ -5,3 +5,6 @@ transformers
 sentencepiece
 protobuf
 requests
+pytorch-lightning
+spacy
+sense2vec
