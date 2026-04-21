@@ -116,7 +116,16 @@ async def process_quiz(request: QuizRequest):
         # รอจนกว่าทุกข้อจะสร้างเสร็จ
         quiz_list = await asyncio.gather(*tasks)
 
-        return {"quiz": quiz_list}
+        # กรองคำถามซ้ำออก (เปรียบเทียบด้วย question text ที่ normalize แล้ว)
+        seen_questions = set()
+        unique_quiz = []
+        for item in quiz_list:
+            key = normalize(item["question"])
+            if key not in seen_questions:
+                seen_questions.add(key)
+                unique_quiz.append(item)
+
+        return {"quiz": unique_quiz}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

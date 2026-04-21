@@ -4,40 +4,34 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        /* 1. ส่วนกรอบนอกสุด (พื้นหลังของ Popup) */
         body {
-            width: 340px; /* ขยายความกว้างเผื่อขอบเงา */
+            width: 340px;
             margin: 0;
-            padding: 12px; /* เว้นระยะเข้ามาด้านใน เพื่อให้มีพื้นที่แสดงความโค้งและเงา */
+            padding: 12px;
             font-family: sans-serif;
-            background: #eef0f3; /* สีพื้นหลังด้านนอกสุด (เทาอ่อน) */
+            background: #eef0f3;
             box-sizing: border-box;
         }
 
-        /* 2. ส่วนกล่องแอปสีขาว (ทำมุมโค้งตรงนี้) */
         .app-wrapper {
             background: #ffffff;
-            border-radius: 16px; /* 🌟 ปรับความโค้งของมุมตรงนี้ (เลขยิ่งมากยิ่งโค้ง) */
+            border-radius: 16px;
             padding: 15px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08); /* เพิ่มเงาให้ดูป๊อปอัพเด้งขึ้นมา */
-            max-height: 520px; /* ควบคุมความสูงที่กล่องนี้แทน */
-            overflow-y: auto; /* ให้เลื่อนสกอร์ลบาร์ข้างในกล่อง */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            max-height: 520px;
+            overflow-y: auto;
         }
 
-        /* 🌟 3. ตกแต่ง Scrollbar ให้ดูโค้งมนเข้ากับ UI */
-        .app-wrapper::-webkit-scrollbar {
-            width: 6px;
-        }
-        .app-wrapper::-webkit-scrollbar-thumb {
-            background-color: #cccccc;
-            border-radius: 10px;
-        }
+        .app-wrapper::-webkit-scrollbar { width: 6px; }
+        .app-wrapper::-webkit-scrollbar-thumb { background-color: #cccccc; border-radius: 10px; }
 
-        h3 {
-            margin-top: 0;
-            color: #333;
-        }
+        h3 { margin-top: 0; color: #333; }
 
+        /* ===== VIEWS ===== */
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* ===== SETUP ===== */
         textarea {
             width: 100%;
             height: 100px;
@@ -46,6 +40,8 @@
             border-radius: 8px;
             box-sizing: border-box;
             resize: vertical;
+            font-family: sans-serif;
+            font-size: 13px;
         }
 
         .input-group {
@@ -54,108 +50,176 @@
             align-items: center;
             margin-top: 10px;
         }
-
-        .input-group label {
-            font-size: 14px;
-            color: #333;
-        }
-
+        .input-group label { font-size: 14px; color: #333; }
         .input-group input {
-            width: 60px;
-            padding: 6px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            text-align: center;
+            width: 60px; padding: 6px;
+            border: 1px solid #ddd; border-radius: 6px;
+            text-align: center; font-size: 14px;
         }
 
         button {
-            width: 100%;
-            border: none;
-            padding: 12px;
-            margin-top: 15px;
-            border-radius: 8px;
-            background: #007bff;
-            color: white;
-            cursor: pointer;
-            font-weight: bold;
+            width: 100%; border: none; padding: 12px;
+            margin-top: 15px; border-radius: 8px;
+            background: #007bff; color: white;
+            cursor: pointer; font-weight: bold;
+            font-size: 14px; font-family: sans-serif;
             transition: background 0.2s, opacity 0.2s;
         }
+        button:hover:not(:disabled) { background: #0056b3; }
+        button:disabled { background: #cccccc; cursor: not-allowed; opacity: 0.8; }
 
-        button:hover:not(:disabled) {
-            background: #0056b3;
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #007bff;
+            color: #007bff;
+            margin-top: 8px;
         }
-
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-            opacity: 0.8;
-        }
-
-        .quiz-container {
-            margin-top: 20px;
-            padding-top: 15px;
-            border-top: 2px dashed #ddd;
-        }
-
-        .quiz-item {
-            background: white;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #eee;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .quiz-item h4 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #333;
-            font-size: 14px;
-            line-height: 1.4;
-        }
-
-        .choice {
-            display: block;
-            padding: 8px 10px;
-            margin: 5px 0;
-            background: #fdfdfd;
-            border: 1px solid #eee;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-
-        .choice.correct {
-            background: #e7f3ff;
-            border-color: #bee3f8;
-            font-weight: bold;
-            color: #004085;
-        }
+        .btn-outline:hover:not(:disabled) { background: #e8f0ff; }
 
         .status {
-            margin-top: 10px;
-            font-size: 12px;
-            text-align: center;
-            color: #555;
-            min-height: 15px;
+            margin-top: 10px; font-size: 12px;
+            text-align: center; color: #555; min-height: 15px;
         }
+        .status.error { color: #dc3545; }
+
+        /* ===== QUIZ ===== */
+        .quiz-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar-wrap {
+            height: 4px; background: #eee;
+            border-radius: 99px; margin-bottom: 14px;
+        }
+        .progress-bar-fill {
+            height: 100%; background: #007bff;
+            border-radius: 99px; transition: width 0.3s ease;
+        }
+
+        .question-box {
+            background: #f8f9fa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .question-box h4 {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #333;
+        }
+
+        .choices-list { display: flex; flex-direction: column; gap: 6px; }
+
+        .choice-btn {
+            width: 100%; text-align: left;
+            padding: 9px 12px; border-radius: 6px;
+            border: 1px solid #ddd; background: #fff;
+            cursor: pointer; font-family: sans-serif;
+            font-size: 13px; color: #333;
+            transition: border-color 0.15s, background 0.15s;
+            margin-top: 0;
+        }
+        .choice-btn:hover:not(:disabled) { border-color: #007bff; background: #f0f6ff; }
+        .choice-btn:disabled { cursor: default; }
+        .choice-btn.correct { background: #e7f3ff; border-color: #bee3f8; color: #004085; font-weight: bold; }
+        .choice-btn.wrong   { background: #fdf0f0; border-color: #f5c6cb; color: #721c24; }
+
+        .feedback {
+            margin-top: 8px; padding: 8px 12px;
+            border-radius: 6px; font-size: 13px;
+            display: none;
+        }
+        .feedback.show { display: block; }
+        .feedback.correct { background: #e7f3ff; color: #004085; border: 1px solid #bee3f8; }
+        .feedback.wrong   { background: #fdf0f0; color: #721c24; border: 1px solid #f5c6cb; }
+
+        .nav-buttons { display: flex; gap: 8px; margin-top: 10px; }
+        .nav-buttons button { margin-top: 0; }
+
+        /* ===== RESULT ===== */
+        .result-header { text-align: center; padding: 10px 0 14px; }
+        .result-header .emoji { font-size: 40px; }
+        .result-header h4 { margin: 6px 0 2px; color: #333; font-size: 16px; }
+        .result-header p { margin: 0; font-size: 12px; color: #555; }
+
+        .score-display {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #007bff;
+            margin: 10px 0;
+        }
+        .score-display span { font-size: 14px; color: #555; font-weight: normal; }
+
+        .review-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+        .review-item {
+            padding: 8px 10px; border-radius: 6px;
+            border: 1px solid #eee; font-size: 12px;
+            color: #555; line-height: 1.5;
+        }
+        .review-item b { color: #333; }
+        .review-item.correct { border-color: #bee3f8; background: #f0f8ff; }
+        .review-item.wrong   { border-color: #f5c6cb; background: #fff5f5; }
     </style>
 </head>
 
 <body>
     <div class="app-wrapper">
-        <h3>Quick Log</h3>
-        <textarea id="log-text" placeholder="Type something..."></textarea>
-        
-        <div class="input-group">
-            <label for="num-questions">กำหนดจำนวนข้อ</label>
-            <input type="number" id="num-questions" min="1" max="20" value="1">
+        <h3>Generate Quiz</h3>
+
+        <!-- VIEW: SETUP -->
+        <div id="view-setup" class="view active">
+            <textarea id="log-text" placeholder="Type something..."></textarea>
+            <div class="input-group">
+                <label for="num-questions">กำหนดจำนวนข้อ</label>
+                <input type="number" id="num-questions" min="1" max="20" value="5">
+            </div>
+            <button id="send-btn">Generate question</button>
+            <div id="status-msg" class="status"></div>
         </div>
-        
-        <button id="send-btn">Send to Backend</button>
-        <div id="status-msg" class="status"></div>
-        <div id="quiz-results" class="quiz-container"></div>
+
+        <!-- VIEW: QUIZ -->
+        <div id="view-quiz" class="view">
+            <div class="quiz-meta">
+                <span id="q-progress">ข้อ 1 / 5</span>
+                <span id="q-score">คะแนน: 0</span>
+            </div>
+            <div class="progress-bar-wrap">
+                <div class="progress-bar-fill" id="q-bar" style="width:0%"></div>
+            </div>
+            <div class="question-box">
+                <h4 id="q-text"></h4>
+            </div>
+            <div class="choices-list" id="q-choices"></div>
+            <div class="feedback" id="q-feedback"></div>
+            <div class="nav-buttons">
+                <button class="btn-outline" id="q-back" style="display:none">← ย้อนกลับ</button>
+                <button id="q-next" style="display:none">ข้อถัดไป →</button>
+            </div>
+        </div>
+
+        <!-- VIEW: RESULT -->
+        <div id="view-result" class="view">
+            <div class="result-header">
+                <div class="emoji" id="r-emoji">🎉</div>
+                <h4 id="r-title">ยอดเยี่ยม!</h4>
+                <p id="r-subtitle">คุณทำได้ดีมาก</p>
+            </div>
+            <div class="score-display" id="r-score">
+                0/0 <span id="r-pct">(0%)</span>
+            </div>
+            <div class="review-list" id="r-review"></div>
+            <button id="retry-btn">🔄 ทำข้อสอบใหม่อีกครั้ง</button>
+            <button class="btn-outline" id="new-quiz-btn">📝 สร้างข้อสอบใหม่</button>
+        </div>
     </div>
-    
+
     <script src="popup.js"></script>
 </body>
 
