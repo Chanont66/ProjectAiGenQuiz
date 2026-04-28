@@ -6,15 +6,10 @@ import random
 import re
 import asyncio
 import torch
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-
-torch.serialization.add_safe_globals([ModelCheckpoint])
-
 from services.question_generator import QuestionGenerator
 from services.choice_generator import ChoiceGenerator
+from services.shared import SEP_TOKEN
 from utils.clean_text import clean, normalize
-
-SEP_TOKEN = '<sep>'
 
 app = FastAPI()
 
@@ -29,8 +24,7 @@ app.add_middleware(
 try:
     qg = QuestionGenerator('../model/model_gen_quiz/model_quiz.ckpt')
     cg = ChoiceGenerator(
-        checkpoint_path='../model/model_gen_choice/model_choice.ckpt',
-        s2v_path='../model/s2v_old'
+        checkpoint_path='../model/model_gen_choice/model_choice.ckpt'
     )
 except Exception as e:
     raise RuntimeError(f"Failed to load models: {e}")
@@ -54,24 +48,17 @@ def generate_one_quiz(text: str, sample_text: str):
     # ส่งคำตอบ, context, quiz ให้ model choice
     distractors = cg.generate(answer, text, question=question_text)
 
-    # คำตอบ รวมกับ choice
-    choices = [answer] + (distractors if distractors else [])
-    choices_dict = {normalize(c): c for c in choices}
-    filtered_choices = [c for norm_c, c in choices_dict.items() if norm_c != normalize(answer)]
+    # กรอง distractors ที่อาจซ้ำกับคำตอบ (ปกติ ChoiceGenerator กรองมาแล้ว)
+    final_distractors = []
+    seen = {normalize(answer)}
+    for d in distractors:
+        norm_d = normalize(d)
+        if norm_d not in seen:
+            seen.add(norm_d)
+            final_distractors.append(d)
     
-    # เติมตัวเลือกให้ครบ 3 อีกที (กันว่าถ้า s2v ช่วยไม่ได้)
-    words_in_text = [w for w in text.split() if len(w) > 3 and w.istitle()] 
-    while len(filtered_choices) < 3:
-        if words_in_text:
-            fallback_word = random.choice(words_in_text) # สุ่มคำจากเนื้อหา
-        else:
-            # สุ่มคำสำเร็จรูป ถ้ามันได้ choice ไม่ครบจริงๆ
-            fallback_word = random.choice(["None of the above", "Cannot be determined", "All of the above", "Not mentioned"])
-        
-        if normalize(fallback_word) != normalize(answer) and normalize(fallback_word) not in [normalize(c) for c in filtered_choices]:
-            filtered_choices.append(fallback_word)
-    
-    final_choices = [answer] + filtered_choices[:3] # รวมคำตอบกับ choice
+    # รวมคำตอบกับดึงมาแค่ 3 ข้อแรก (ถ้ามี)
+    final_choices = [answer] + final_distractors[:3]
     random.shuffle(final_choices) # สุ่มสลับข้อ
 
     return {

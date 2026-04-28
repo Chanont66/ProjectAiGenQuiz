@@ -1,72 +1,78 @@
 import torch
-from transformers import T5ForConditionalGeneration, AutoTokenizer
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 import spacy
-from sense2vec import Sense2Vec
+import random
+import os
+import sys
+
+# เพิ่ม path เพื่อให้สามารถเรียกใช้ utils ได้เมื่อรันไฟล์นี้โดยตรง
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from typing import Optional
+from utils.nltk import get_wordnet_distractors
 
-torch.serialization.add_safe_globals([ModelCheckpoint])
+from .shared import QGModel, SEP_TOKEN, get_tokenizer, CHOICE_SOURCE_MAX_LEN, CHOICE_TARGET_MAX_LEN
 
-SEP_TOKEN = '<sep>'
-MODEL_NAME = 't5-small'
-SOURCE_MAX_TOKEN_LEN = 512
-TARGET_MAX_TOKEN_LEN = 64
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-tokenizer.add_tokens(SEP_TOKEN)
-tokenizer_len = len(tokenizer)
-
-
-class QGModel(pl.LightningModule):
-    def __init__(self):
-        super().__init__()
-        self.model = T5ForConditionalGeneration.from_pretrained(MODEL_NAME, return_dict=True)
-        self.model.resize_token_embeddings(tokenizer_len)
-
-    def forward(self, input_ids, attention_mask, labels=None):
-        output = self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        return output.loss, output.logits
-
-    def configure_optimizers(self):
-        pass
 
 
 class ChoiceGenerator:
-    def __init__(self, checkpoint_path: str, s2v_path: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        self.tokenizer.add_tokens(SEP_TOKEN)
-        self.model = QGModel.load_from_checkpoint(checkpoint_path)
-        self.model.model.resize_token_embeddings(tokenizer_len)
+    def __init__(self, checkpoint_path: str, **kwargs):
+        self.tokenizer = get_tokenizer()
+        # Pass tokenizer length to QGModel constructor if needed by Lightning
+        self.model = QGModel.load_from_checkpoint(checkpoint_path, tokenizer_len=len(self.tokenizer))
         self.model.eval()
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model.to(self.device)
-        self.s2v = Sense2Vec().from_disk(s2v_path)
         self.nlp = spacy.load('en_core_web_sm')
 
-    def _get_s2v_distractors(self, answer: str, count: int = 3) -> list[str]:
-        from collections import OrderedDict
-        
-        answer_normalized = answer.lower().replace(' ', '_')
-        sense = self.s2v.get_best_sense(answer_normalized)
-        
-        if not sense:
-            return []
-        
-        most_similar = self.s2v.most_similar(sense, n=count + 5)  # เผื่อกรองออก
-        
+
+    def _get_context_fallback(self, answer: str, context: str, count: int = 3) -> list[str]:
+        doc = self.nlp(context)
+
+        # ลอง NER ก่อน (entity ประเภทเดียวกัน)
+        answer_ents = [ent for ent in doc.ents if answer.lower() in ent.text.lower()]
+        answer_label = answer_ents[0].label_ if answer_ents else None
+
+        candidates = []
+        if answer_label:
+            candidates = [
+                ent.text for ent in doc.ents
+                if ent.label_ == answer_label and ent.text.lower() != answer.lower()
+            ]
+
+        # fallback: คำ title-case จาก context
+        if not candidates:
+            candidates = [
+                token.text for token in doc
+                if token.is_alpha and len(token.text) > 3
+                and token.text.istitle()
+                and token.text.lower() != answer.lower()
+            ]
+
+        # fallback สุดท้าย: คำทั่วไปยาว > 4 ตัวอักษร
+        if not candidates:
+            candidates = [
+                token.text for token in doc
+                if token.is_alpha and len(token.text) > 4
+                and not token.is_stop
+                and token.text.lower() != answer.lower()
+            ]
+
+        # สุ่มและ deduplicate
+        random.shuffle(candidates)
+        seen = set()
         results = []
-        for phrase in most_similar:
-            text = phrase[0].split('|')[0].replace('_', ' ').lower()
-            if text != answer.lower():
-                results.append(text.capitalize())
+        for c in candidates:
+            if c.lower() not in seen:
+                seen.add(c.lower())
+                results.append(c)
             if len(results) >= count:
                 break
-        
-        return list(OrderedDict.fromkeys(results))
+
+        return results[:count]
 
     def generate(self, correct: str, context: str, question: Optional[str] = None, count: int = 8) -> list[str]:
-        # ใส่โจทย์ลงไปใน Prompt ด้วยแบบต้นฉบับ Leaf
+        # สร้าง input prompt
         if question:
             input_text = '{} {} {} {} {}'.format(correct, SEP_TOKEN, question, SEP_TOKEN, context)
         else:
@@ -74,7 +80,7 @@ class ChoiceGenerator:
 
         source_encoding = self.tokenizer(
             input_text,
-            max_length=SOURCE_MAX_TOKEN_LEN,
+            max_length=CHOICE_SOURCE_MAX_LEN,
             padding='max_length',
             truncation=True,
             return_attention_mask=True,
@@ -86,7 +92,7 @@ class ChoiceGenerator:
             attention_mask=source_encoding['attention_mask'].to(self.device),
             num_beams=count,
             num_return_sequences=count,
-            max_length=TARGET_MAX_TOKEN_LEN,
+            max_length=CHOICE_TARGET_MAX_LEN,
             repetition_penalty=2.5,
             length_penalty=1.0,
             early_stopping=True,
@@ -103,30 +109,48 @@ class ChoiceGenerator:
                 results.append(first_part)
                 seen.append(first_part)
 
-        # ถ้า T5 ได้ไม่ครบ 3 → เติมด้วย sense2vec
+        # T5 ได้ครบ จบ
+        if len(results) >= 3:
+            return results[:3]
+
+        # ไม่ครบ ลองเติมด้วย WordNet
+        needed = 3 - len(results)
+        wn_results = get_wordnet_distractors(correct, count=needed)
+        existing_lower = {r.lower() for r in results}
+        for w in wn_results:
+            if w.lower() not in existing_lower:
+                results.append(w)
+                existing_lower.add(w.lower())
+            if len(results) >= 3:
+                break
+
+        # ถ้ายังไม่ครบอีก ก็สุ่มจาก context
         if len(results) < 3:
-            s2v_results = self._get_s2v_distractors(correct, count=3 - len(results))
-            results += s2v_results
+            needed = 3 - len(results)
+            ctx_results = self._get_context_fallback(correct, context, count=needed)
+            existing_lower = {r.lower() for r in results}
+            for w in ctx_results:
+                if w.lower() not in existing_lower:
+                    results.append(w)
+                    existing_lower.add(w.lower())
+                if len(results) >= 3:
+                    break
 
         return results[:3]
 
 
+# if __name__ == '__main__':
+#     cg = ChoiceGenerator(
+#         checkpoint_path='model/model_gen_choice/model_choice.ckpt',
+#     )
 
+#     correct_answer = 'Oxygen'
+#     question = 'What is the chemical element with the symbol O?'
+#     context = "Oxygen is the chemical element with the symbol O and atomic number 8. It is a member of the chalcogen group in the periodic table, a highly reactive nonmetal, and an oxidizing agent that readily forms oxides with most elements as well as with other compounds. Oxygen is Earth's most abundant element, and after hydrogen and helium, it is the third-most abundant element in the universe. At standard temperature and pressure, two atoms of the element bind to form dioxygen, a colorless and odorless diatomic gas with the formula O2. Diatomic oxygen gas currently constitutes 20.95% of the Earth's atmosphere, though this has changed considerably over long periods of time. Oxygen makes up almost half of the Earth's crust in the form of oxides."
 
-if __name__ == '__main__':
+#     result = cg.generate(correct_answer, context, question=question)
 
-    cg = ChoiceGenerator(
-        checkpoint_path='model/model_gen_choice/model_choice.ckpt',
-        s2v_path='model/s2v_old'
-    )
-    
-    correct_answer = 'big O notation'
-    question = 'What expression is generally used to convey upper or lower bounds?'
-    context = 'Upper and lower bounds are usually stated using the big O notation, which hides constant factors and smaller terms. This makes the bounds independent of the specific details of the computational model used. For instance, if T(n) = 7n2 + 15n + 40, in big O notation one would write T(n) = O(n2).'
-    
-    result = cg.generate(correct_answer, context, question=question)
-    
-    print(f"Question: {question}")
-    print(f"Answer: {correct_answer}")
-    print(f"Distractors: {result}")
-    print('--- test complete ---')
+#     print(f"Question: {question}")
+#     print(f"Answer:   {correct_answer}")
+#     print(f"Distractors: {result}")
+#     print('--- test complete ---')
