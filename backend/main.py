@@ -5,6 +5,10 @@ import uvicorn
 import random
 import re
 import asyncio
+import torch
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+
+torch.serialization.add_safe_globals([ModelCheckpoint])
 
 from services.question_generator import QuestionGenerator
 from services.choice_generator import ChoiceGenerator
@@ -25,8 +29,8 @@ app.add_middleware(
 try:
     qg = QuestionGenerator('../model/model_gen_quiz/model_quiz.ckpt')
     cg = ChoiceGenerator(
-        checkpoint_path='../model/model_gen_choice/race-distractors.ckpt',
-        s2v_path='../model/s2v_reddit/s2v_reddit_2015_md/s2v_old'
+        checkpoint_path='../model/model_gen_choice/model_choice.ckpt',
+        s2v_path='../model/s2v_old'
     )
 except Exception as e:
     raise RuntimeError(f"Failed to load models: {e}")
@@ -35,13 +39,10 @@ class QuizRequest(BaseModel):
     text: str
     numQuiz: int = 1
 
-# ---------------------------------------------------------
-# ฟังก์ชันแยกสำหรับสร้างข้อสอบ 1 ข้อ
-# ---------------------------------------------------------
 def generate_one_quiz(text: str, sample_text: str):
-    # ใช้ sample_text (ประโยคเฉพาะข้อนั้นๆ) ไปสร้างคำถาม
     question = qg.generate('[MASK]', sample_text) 
 
+    # เช็คว่าได้คำตอบไหม (เช็คจาก SEP_TOKEN ถ้ามี = มีคำตอบ)
     if SEP_TOKEN in question:
         parts = question.split(SEP_TOKEN)
         answer = parts[0].strip()
@@ -50,28 +51,28 @@ def generate_one_quiz(text: str, sample_text: str):
         answer = '[MASK]'
         question_text = question
 
-    # สร้างตัวเลือกหลอกจาก text เต็ม (เพื่อให้ได้ตัวเลือกที่สมเหตุสมผลกับเนื้อเรื่อง)
-    distractors = cg.generate(answer, text)
+    # ส่งคำตอบ, context, quiz ให้ model choice
+    distractors = cg.generate(answer, text, question=question_text)
 
+    # คำตอบ รวมกับ choice
     choices = [answer] + (distractors if distractors else [])
     choices_dict = {normalize(c): c for c in choices}
     filtered_choices = [c for norm_c, c in choices_dict.items() if norm_c != normalize(answer)]
     
-    # ระบบเติมตัวเลือกให้ครบ 4 ข้อเสมอ (Fallback)
+    # เติมตัวเลือกให้ครบ 3 อีกที (กันว่าถ้า s2v ช่วยไม่ได้)
     words_in_text = [w for w in text.split() if len(w) > 3 and w.istitle()] 
-    
     while len(filtered_choices) < 3:
         if words_in_text:
-            fallback_word = random.choice(words_in_text)
+            fallback_word = random.choice(words_in_text) # สุ่มคำจากเนื้อหา
         else:
+            # สุ่มคำสำเร็จรูป ถ้ามันได้ choice ไม่ครบจริงๆ
             fallback_word = random.choice(["None of the above", "Cannot be determined", "All of the above", "Not mentioned"])
         
-        # เช็คว่าคำที่สุ่มมา ต้องไม่ซ้ำกับเฉลย และไม่ซ้ำกับตัวเลือกที่มีอยู่แล้ว
         if normalize(fallback_word) != normalize(answer) and normalize(fallback_word) not in [normalize(c) for c in filtered_choices]:
             filtered_choices.append(fallback_word)
-
-    final_choices = [answer] + filtered_choices[:3]
-    random.shuffle(final_choices)
+    
+    final_choices = [answer] + filtered_choices[:3] # รวมคำตอบกับ choice
+    random.shuffle(final_choices) # สุ่มสลับข้อ
 
     return {
         "question": question_text,
@@ -79,44 +80,44 @@ def generate_one_quiz(text: str, sample_text: str):
         "answer": answer
     }
 
-# ---------------------------------------------------------
-# API Endpoint
-# ---------------------------------------------------------
 @app.post("/generate-quiz")
 async def process_quiz(request: QuizRequest):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
+    # คลีน text ก่อน
     text = clean(request.text)
     num_quiz = request.numQuiz
 
-    # หั่นเป็นประโยคย่อยๆ
+    # หั่นเป็นประโยคย่อยๆ - ให้มันอ่านได้ ไม่เกิน token limit
     sentences = [s.strip() for s in re.split(r'[.!?\n]', text) if len(s) > 10]
     if not sentences:
         sentences = [text] 
 
     try:
-        # สับไพ่ประโยคก่อน 1 รอบ
-        random.shuffle(sentences)
-
         tasks = []
+        n_sents = len(sentences)
+        
+        # วนทำตามจำนวนข้อ
         for i in range(num_quiz):
-            # แจกประโยคให้ทีละข้อเรียงตามลำดับ วนลูปถ้าประโยคหมด
-            sample_text = sentences[i % len(sentences)]
+            start_idx = int((i * n_sents) / max(num_quiz, 1)) % max(n_sents, 1) # กันใช้เนื้อหาซ้ำจุดเดียวกัน
             
-            # ทริค: ถ้าสั่งสร้างข้อสอบ "มากกว่า" ประโยคที่มี ให้เอาประโยคถัดไปมาต่อท้าย 
-            # เพื่อหลอกโมเดลว่าเนื้อหาไม่เหมือนเดิม จะได้ไม่สร้างคำถามซ้ำ
-            if i >= len(sentences):
-                next_sentence = sentences[(i + 1) % len(sentences)]
-                sample_text = sample_text + " " + next_sentence
+            # เลือก 3 ประโยค (ถ้าเนื้อหาน้อยกว่าก็เลือกเท่านั้น)
+            window_size = min(3, n_sents) 
+            chunk_sents = []
+            
+            for j in range(window_size):
+                curr_idx = (start_idx + j) % max(n_sents, 1)
+                if sentences[curr_idx] not in chunk_sents:
+                    chunk_sents.append(sentences[curr_idx])
+           
+            sample_text = " ".join(chunk_sents) # รวมประโยคที่เลือก
 
-            # โยนงานเข้า Background Thread ให้ทำพร้อมๆ กัน
             tasks.append(asyncio.to_thread(generate_one_quiz, text, sample_text))
         
-        # รอจนกว่าทุกข้อจะสร้างเสร็จ
         quiz_list = await asyncio.gather(*tasks)
 
-        # กรองคำถามซ้ำออก (เปรียบเทียบด้วย question text ที่ normalize แล้ว)
+        # กรอง quiz ที่ซ้ำกัน - กลายเป็นมีปัญหาได้ quiz ไม่ครบเพราะมันซ้ำ
         seen_questions = set()
         unique_quiz = []
         for item in quiz_list:

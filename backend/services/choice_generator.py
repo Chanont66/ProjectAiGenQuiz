@@ -1,11 +1,10 @@
-# backend/services/choice_generator.py
-
 import torch
 from transformers import T5ForConditionalGeneration, AutoTokenizer
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 import spacy
 from sense2vec import Sense2Vec
+from typing import Optional
 
 torch.serialization.add_safe_globals([ModelCheckpoint])
 
@@ -66,9 +65,15 @@ class ChoiceGenerator:
         
         return list(OrderedDict.fromkeys(results))
 
-    def generate(self, correct: str, context: str, count: int = 8) -> list[str]:
+    def generate(self, correct: str, context: str, question: Optional[str] = None, count: int = 8) -> list[str]:
+        # ใส่โจทย์ลงไปใน Prompt ด้วยแบบต้นฉบับ Leaf
+        if question:
+            input_text = '{} {} {} {} {}'.format(correct, SEP_TOKEN, question, SEP_TOKEN, context)
+        else:
+            input_text = '{} {} {}'.format(correct, SEP_TOKEN, context)
+
         source_encoding = self.tokenizer(
-            '{} {} {}'.format(correct, SEP_TOKEN, context),
+            input_text,
             max_length=SOURCE_MAX_TOKEN_LEN,
             padding='max_length',
             truncation=True,
@@ -108,15 +113,20 @@ class ChoiceGenerator:
 
 
 
-# if __name__ == '__main__':
-#     # ---------------------------- test ----------------------------
-#     cg = ChoiceGenerator(
-#         # checkpoint_path='model/model_gen_choice/model_choice.ckpt',
-#         checkpoint_path='model/model_gen_choice/race-distractors.ckpt',
-#         s2v_path='model/s2v_reddit/s2v_reddit_2015_md/s2v_old'
-#     )
-#     result = cg.generate('Oxygen', 'Oxygen is the chemical element with the symbol O and atomic number 8.')
-#     print(result)
+if __name__ == '__main__':
 
-# pip install sense2vec spacy
-# python -m spacy download en_core_web_sm
+    cg = ChoiceGenerator(
+        checkpoint_path='model/model_gen_choice/model_choice.ckpt',
+        s2v_path='model/s2v_old'
+    )
+    
+    correct_answer = 'big O notation'
+    question = 'What expression is generally used to convey upper or lower bounds?'
+    context = 'Upper and lower bounds are usually stated using the big O notation, which hides constant factors and smaller terms. This makes the bounds independent of the specific details of the computational model used. For instance, if T(n) = 7n2 + 15n + 40, in big O notation one would write T(n) = O(n2).'
+    
+    result = cg.generate(correct_answer, context, question=question)
+    
+    print(f"Question: {question}")
+    print(f"Answer: {correct_answer}")
+    print(f"Distractors: {result}")
+    print('--- test complete ---')

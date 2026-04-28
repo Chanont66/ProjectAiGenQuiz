@@ -1,5 +1,3 @@
-# backend/services/question_generator.py
-
 import torch
 from transformers import T5ForConditionalGeneration, AutoTokenizer
 import pytorch_lightning as pl
@@ -55,9 +53,12 @@ class QuestionGenerator:
         generated_ids = self.model.model.generate(
             input_ids=source_encoding['input_ids'].to(self.device),
             attention_mask=source_encoding['attention_mask'].to(self.device),
-            num_beams=4,
+            num_beams=16,
             max_length=TARGET_MAX_TOKEN_LEN,
-            early_stopping=True
+            repetition_penalty=2.5,
+            length_penalty=1.0,
+            early_stopping=True,
+            use_cache=True
         )
 
         raw = self.tokenizer.decode(generated_ids[0], skip_special_tokens=False)
@@ -69,9 +70,11 @@ class QuestionGenerator:
 
 
 
-# if __name__ == '__main__':
-#     # ---------------------------- test model ----------------------------
-#     qg = QuestionGenerator('model/model_gen_quiz/model_quiz.ckpt')
-#     result = qg.generate('[MASK]', 'Oxygen is the chemical element with the symbol O and atomic number 8.')
-#     print(result)
-#     print('ok now?')
+if __name__ == '__main__':
+    qg = QuestionGenerator('model/model_gen_quiz/model_quiz.ckpt')
+    sample_context = "Oxygen is the chemical element with the symbol O and atomic number 8. It is a member of the chalcogen group in the periodic table, a highly reactive nonmetal, and an oxidizing agent that readily forms oxides with most elements as well as with other compounds. Oxygen is Earth's most abundant element, and after hydrogen and helium, it is the third-most abundant element in the universe. At standard temperature and pressure, two atoms of the element bind to form dioxygen, a colorless and odorless diatomic gas with the formula O2. Diatomic oxygen gas currently constitutes 20.95% of the Earth's atmosphere, though this has changed considerably over long periods of time. Oxygen makes up almost half of the Earth's crust in the form of oxides."
+    result = qg.generate('[MASK]', sample_context)
+    
+    print(f"Context: {sample_context}")
+    print(f"Result: {result}")
+    print('--- test complete ---')
